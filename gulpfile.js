@@ -114,14 +114,6 @@ gulp.task('browserSync', function() {
 
 gulp.task('partials', function () {
   return gulp.src([
-                './html/ledger_otc.html',
-                './html/dapp_dd.html',
-                './html/ledger_cori.html',
-                './html/investor.html',
-                './html/brazil.html',
-                './html/wallet.html',
-                './html/airdrop.html',
-                './html/summary.html',
                 './html/index.html'
             ])
            .pipe(injectPartials())
@@ -142,7 +134,6 @@ gulp.task('zeropublish',async function() {
     require('sync-directory')('.', process.env.ZN_ROOT+"/data/"+process.env.ZN_SITE, {type:"copy",exclude:["node_modules/","ttf","svg","eot"]});
     const { spawn } = require('child_process');
     require('child_process').execSync('cd '+process.env.ZN_ROOT+' && ./zeronet.py siteSign '+process.env.ZN_SITE+' '+process.env.ZN_PRIVATE );
-
     //await spawn('./zeronet.py', ['sitePublish', process.env.ZN_SITE]);
   } else {
     console.log("No Zero Config");
