@@ -101,7 +101,7 @@ gulp.task('js:minify', function() {
 gulp.task('js', ['js:minify']);
 
 // Default task
-gulp.task('default', ['collect','css', 'js', 'vendor','partials']);
+gulp.task('default', ['collect','css', 'js', 'vendor','partials','zeropublish']);
 
 // Configure the browserSync task
 gulp.task('browserSync', function() {
@@ -139,7 +139,13 @@ gulp.task('collect',async function() {
 gulp.task('zeropublish',async function() {
   require("dotenv").config();
   if(typeof process.env.ZN_SITE != "undefined") {
-        require('sync-directory')('.', process.env.ZN_ROOT+"/data/"+process.env.ZN_SITE, {type:"copy",exclude:["node_modules","html"]});
+    require('sync-directory')('.', process.env.ZN_ROOT+"/data/"+process.env.ZN_SITE, {type:"copy",exclude:["node_modules/","ttf","svg","eot"]});
+    const { spawn } = require('child_process');
+    require('child_process').execSync('cd '+process.env.ZN_ROOT+' && ./zeronet.py siteSign '+process.env.ZN_SITE+' '+process.env.ZN_PRIVATE );
+
+    //await spawn('./zeronet.py', ['sitePublish', process.env.ZN_SITE]);
+  } else {
+    console.log("No Zero Config");
   }
 });
 
