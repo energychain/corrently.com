@@ -114,6 +114,14 @@ gulp.task('browserSync', function() {
 
 gulp.task('partials', function () {
   return gulp.src([
+                './html/ledger_otc.html',
+                './html/dapp_dd.html',
+                './html/ledger_cori.html',
+                './html/investor.html',
+                './html/brazil.html',
+                './html/wallet.html',
+                './html/airdrop.html',
+                './html/summary.html',
                 './html/index.html'
             ])
            .pipe(injectPartials())
