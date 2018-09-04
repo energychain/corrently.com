@@ -136,8 +136,15 @@ gulp.task('collect',async function() {
   fs.writeFileSync("data/asset_0c56adc82680493f946599a2f00c1d6d.json",JSON.stringify(response));
 });
 
+gulp.task('zeropublish',async function() {
+  require("dotenv").config();
+  if(typeof process.env.ZN_SITE != "undefined") {
+        require('sync-directory')('.', process.env.ZN_ROOT+"/data/"+process.env.ZN_SITE, {type:"copy",exclude:["node_modules","html"]});
+  }
+});
+
 // Dev task
-gulp.task('dev', ['collect','css', 'js','partials', 'browserSync'], function() {
+gulp.task('dev', ['collect','css', 'js','partials', 'browserSync','zeropublish'], function() {
   gulp.watch('./scss/*.scss', ['css']);
   gulp.watch('./js/*.js', ['js']);
   gulp.watch('./html/*.html', ['partials']);
