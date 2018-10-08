@@ -1,159 +1,93 @@
-var gulp = require('gulp');
-var sass = require('gulp-sass');
-var header = require('gulp-header');
-var cleanCSS = require('gulp-clean-css');
-var rename = require("gulp-rename");
-var uglify = require('gulp-uglify');
-var pkg = require('./package.json');
-var browserSync = require('browser-sync').create();
-var injectPartials = require('gulp-inject-partials');
-var r2 = require("r2");
+"use strict";
 
-// Set the banner content
-var banner = ['/*!\n',
-  ' * Corrently - <%= pkg.title %> v<%= pkg.version %> (<%= pkg.homepage %>)\n',
-  ' * Copyright 2018-' + (new Date()).getFullYear(), ' <%= pkg.author %>\n',
-  ' * Licensed under <%= pkg.license %>\n',
-  ' */\n',
-  ''
-].join('');
+var gulp = require('gulp'),
+	  concat = require('gulp-concat'),
+	  uglify = require('gulp-uglify'),
+	  rename = require('gulp-rename'),
+	  sass = require('gulp-sass'),
+	  maps = require('gulp-sourcemaps'),
+	  del = require('del'),
+	  autoprefixer = require('gulp-autoprefixer'),
+	  browserSync = require('browser-sync').create(),
+	  htmlreplace = require('gulp-html-replace'),
+	  cssmin = require('gulp-cssmin');
 
-// Copy third party libraries from /node_modules into /vendor
-gulp.task('vendor', function() {
-
-  // Bootstrap
-  gulp.src([
-      './node_modules/bootstrap/dist/**/*',
-      '!./node_modules/bootstrap/dist/css/bootstrap-grid*',
-      '!./node_modules/bootstrap/dist/css/bootstrap-reboot*'
-    ])
-    .pipe(gulp.dest('./vendor/bootstrap'))
-
-  // Font Awesome 5
-  gulp.src([
-      './node_modules/@fortawesome/**/*'
-    ])
-    .pipe(gulp.dest('./vendor'))
-
-  // jQuery
-  gulp.src([
-      './node_modules/jquery/dist/*',
-      '!./node_modules/jquery/dist/core.js'
-    ])
-    .pipe(gulp.dest('./vendor/jquery'))
-
-  // jQuery Easing
-  gulp.src([
-      './node_modules/jquery.easing/*.js'
-    ])
-    .pipe(gulp.dest('./vendor/jquery-easing'))
-
+gulp.task("concatScripts", function() {
+	return gulp.src([
+		'assets/js/vendor/jquery-3.3.1.min.js',
+		'assets/js/vendor/popper.min.js',
+		'assets/js/vendor/bootstrap.min.js',
+		'assets/js/correntlywallet.js',
+		'assets/js/functions.js'
+	])
+		.pipe(maps.init())
+		.pipe(concat('main.js'))
+		.pipe(maps.write('./'))
+		.pipe(gulp.dest('assets/js'))
+		.pipe(browserSync.stream());
 });
 
-// Compile SCSS
-gulp.task('css:compile', function() {
-  return gulp.src('./scss/**/*.scss')
-    .pipe(sass.sync({
-      outputStyle: 'expanded'
-    }).on('error', sass.logError))
-    .pipe(header(banner, {
-      pkg: pkg
-    }))
-    .pipe(gulp.dest('./css'))
+gulp.task("minifyScripts", ["concatScripts"], function() {
+  return gulp.src("assets/js/main.js")
+	  .pipe(uglify())
+	  .pipe(rename('main.min.js'))
+	  .pipe(gulp.dest('dist/assets/js'));
 });
 
-// Minify CSS
-gulp.task('css:minify', ['css:compile'], function() {
-  return gulp.src([
-      './css/*.css',
-      '!./css/*.min.css'
-    ])
-    .pipe(cleanCSS())
-    .pipe(rename({
-      suffix: '.min'
-    }))
-    .pipe(gulp.dest('./css'))
+gulp.task('compileSass', function() {
+  return gulp.src("assets/css/main.scss")
+    .pipe(maps.init())
+    .pipe(sass().on('error', sass.logError))
+    .pipe(autoprefixer())
+    .pipe(maps.write('./'))
+    .pipe(gulp.dest('assets/css'))
     .pipe(browserSync.stream());
 });
 
-// CSS
-gulp.task('css', ['css:compile', 'css:minify']);
-
-// Minify JavaScript
-gulp.task('js:minify', function() {
-  return gulp.src([
-      './js/*.js',
-      '!./js/*.min.js'
-    ])
-    .pipe(uglify())
-    .pipe(rename({
-      suffix: '.min'
-    }))
-    .pipe(header(banner, {
-      pkg: pkg
-    }))
-    .pipe(gulp.dest('./js'))
-    .pipe(browserSync.stream());
+gulp.task("minifyCss", ["compileSass"], function() {
+  return gulp.src("assets/css/main.css")
+    .pipe(cssmin())
+    .pipe(rename('main.min.css'))
+    .pipe(gulp.dest('dist/assets/css'));
 });
 
+gulp.task('watchFiles', function() {
+  gulp.watch('assets/css/**/*.scss', ['compileSass']);
+  gulp.watch('assets/js/*.js', ['concatScripts']);
+})
 
-// JS
-gulp.task('js', ['js:minify']);
+gulp.task('clean', function() {
+  del(['dist', 'assets/css/main.css*', 'assets/js/main*.js*']);
+});
 
-// Default task
-gulp.task('default', ['collect','css', 'js', 'vendor','partials','zeropublish']);
+gulp.task('renameSources', function() {
+  return gulp.src(['*.html', '**/*.php', '!dist', '!dist/**'])
+    .pipe(htmlreplace({
+      'js': 'assets/js/main.min.js',
+      'css': 'assets/css/main.min.css'
+    }))
+    .pipe(gulp.dest('dist/'));
+});
 
-// Configure the browserSync task
-gulp.task('browserSync', function() {
+gulp.task("build", ['minifyScripts', 'minifyCss'], function() {
+  return gulp.src([
+		'*.html',
+		'*.php',
+		'favicon.ico',
+		"assets/img/**"
+	], { base: './'})
+		.pipe(gulp.dest('dist'));
+});
+
+gulp.task('serve', ['watchFiles'], function(){
   browserSync.init({
-    server: {
-      baseDir: "./"
-    }
+  	server: "./"
   });
+
+  gulp.watch("assets/css/**/*.scss", ['watchFiles']);
+  gulp.watch(['*.html', '*.php']).on('change', browserSync.reload);
 });
 
-gulp.task('partials', function () {
-  return gulp.src([
-                './html/ledger_otc.html',
-                './html/dapp_dd.html',
-                './html/ledger_cori.html',
-                './html/investor.html',
-                './html/brazil.html',
-                './html/wallet.html',
-                './html/airdrop.html',
-                './html/summary.html',
-                './html/index.html'
-            ])
-           .pipe(injectPartials())
-           .pipe(gulp.dest('./'));
-});
-
-gulp.task('collect',async function() {
-  const fs = require("fs");
-  let response = await r2("https://corrently.de/static/asset_0480269a2bdb421b9f85e0f353e63c06.json").json;
-  fs.writeFileSync("data/asset_0480269a2bdb421b9f85e0f353e63c06.json",JSON.stringify(response));
-  response = await r2("https://corrently.de/static/asset_0c56adc82680493f946599a2f00c1d6d.json").json;
-  fs.writeFileSync("data/asset_0c56adc82680493f946599a2f00c1d6d.json",JSON.stringify(response));
-});
-
-gulp.task('zeropublish',async function() {
-  require("dotenv").config();
-  if(typeof process.env.ZN_SITE != "undefined") {
-    require('sync-directory')('.', process.env.ZN_ROOT+"/data/"+process.env.ZN_SITE, {type:"copy",exclude:["node_modules/","ttf","svg","eot"]});
-    const { spawn } = require('child_process');
-    require('child_process').execSync('cd '+process.env.ZN_ROOT+' && ./zeronet.py siteSign '+process.env.ZN_SITE+' '+process.env.ZN_PRIVATE );
-    //await spawn('./zeronet.py', ['sitePublish', process.env.ZN_SITE]);
-  } else {
-    console.log("No Zero Config");
-  }
-});
-
-// Dev task
-gulp.task('dev', ['collect','css', 'js','partials', 'browserSync','zeropublish'], function() {
-  gulp.watch('./scss/*.scss', ['css']);
-  gulp.watch('./js/*.js', ['js']);
-  gulp.watch('./html/*.html', ['partials']);
-  gulp.watch('./html/sections/*.html', ['partials']);
-  gulp.watch('./html/includes/*.html', ['partials']);
-  gulp.watch('./*.html', browserSync.reload);
+gulp.task("default", ["clean", 'build'], function() {
+  gulp.start('renameSources');
 });
