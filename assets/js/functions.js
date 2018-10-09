@@ -60,6 +60,12 @@ const getAccountInfo=function(address) {
     }
     html+="</table>";
     $('#txs').html(html);
+    console.log("HERE",data.result.nominalCori);
+    if(data.result.nominalCori>0) {
+      setTimeout(function() {
+          getAccountInfo(address);
+      },20000);
+    }
   });
 }
 function openAccount() {
