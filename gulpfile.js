@@ -12,6 +12,13 @@ var gulp = require('gulp'),
 	  htmlreplace = require('gulp-html-replace'),
 	  cssmin = require('gulp-cssmin');
 
+gulp.task("walletmodule", [], function() {
+  return gulp.src([
+		'node_modules/correntlywallet/dist/correntlywallet.js'
+	], { base: './'})
+		.pipe(gulp.dest('assets/js/'));
+});
+
 gulp.task("concatScripts", function() {
 	return gulp.src([
 		'assets/js/vendor/jquery-3.3.1.min.js',

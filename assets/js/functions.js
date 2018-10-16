@@ -13,6 +13,7 @@ const  cw = CorrentlyWallet.default;
 const backend = "https://api.corrently.de/"
 
 
+
 const getAccountInfo=function(address) {
   $('#acnt_fld').html('<h3><span class="address text-success"></span></h3>');
   $('.address').html(address);
@@ -60,12 +61,25 @@ const getAccountInfo=function(address) {
     }
     html+="</table>";
     $('#txs').html(html);
-    console.log("HERE",data.result.nominalCori);
     if(data.result.nominalCori>0) {
       setTimeout(function() {
           getAccountInfo(address);
       },20000);
     }
+    $.getJSON(backend+"meta?account="+address,function(data) {
+      let html="";
+      html+='<table class="table table-condensed">';
+      html+='<tr><th>Key</th><th>Value</th></tr>';
+      $.each(data.result,function(a,b) {
+        html+='<tr>';
+        html+='<td>'+a+'</td>';
+        html+='<td>'+b+'</td>';
+        html+='</tr>';
+      })
+      html+='</table>';
+      $('#metas').html(html);
+      console.log(data);
+    });
   });
 }
 function openAccount() {
