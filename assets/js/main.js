@@ -24,17 +24,21 @@ Object.defineProperty(exports, "__esModule", {
   value: true
 });
 /**
- * @module CorrentlyWallet
- * @desc Ethereum Blockchain Wallet implementing Green Energy semantics for Corrently based decentralized capacity market
- */
-
-/**
+ * Ethereum Blockchain Wallet implementing Green Energy semantics for Corrently based decentralized capacity market.
  *
+ * @link https://corrently.com/
+ * @module CorrentlyWallet
  */
 
 var ethers = require('ethers');
 
 var request = require('request');
+
+if (typeof ethers.providers.getDefaultProvider === 'undefined') {
+  if (typeof ethers.getDefaultProvider !== 'undefined') {
+    ethers.providers.getDefaultProvider = ethers.getDefaultProvider;
+  }
+}
 /**
  * @const CORRENTLY
  * @desc Core Constants for semantics used in decentralized capacity market
@@ -61,6 +65,19 @@ ethers.CorrentlyAccount = function (address) {
         return new Promise(function (resolve2, reject) {
           cori_contract.balanceOf(address).then(function (balance) {
             resolve2(balance / 100);
+          });
+        });
+      };
+
+      twin.getMetas = function () {
+        return new Promise(function (resolve2, reject2) {
+          var options = {
+            url: ethers.CORRENTLY.API + 'meta?account=' + address,
+            timeout: 20000
+          };
+          request(options, function (e, r, b) {
+            var results = JSON.parse(b);
+            resolve2(results.result);
           });
         });
       };
@@ -139,8 +156,11 @@ ethers.Wallet.prototype.buyCapacity = function (asset, quantity) {
   });
 };
 /**
+ * Link confirmed consumption source to wallet.
+ * Any provider or authority might create new demand links. Typical use of this function is after receiving
+ * a demandLink from a provider/utility.
+ *
  * @function linkDemand
-  *@desc Link confirmed consumption source to wallet
  * @param {string} ethereumAddress Address to link with
  */
 
@@ -165,6 +185,75 @@ ethers.Wallet.prototype.linkDemand = function (ethereumAddress) {
   });
 };
 /**
+ * Set Key Value MetaInformation for account
+ * Allows to associate signed meta information to an account which becomes publicly available
+ *
+ * @function setMeta
+ * @param {string} key Of Meta Date
+ * @param {string} value Of Meta Date
+ */
+
+
+ethers.Wallet.prototype.setMeta = function (key, value) {
+  var parent = this;
+  var _key = key;
+  var _value = value;
+  return new Promise(function (resolve, reject) {
+    var transaction = {};
+    var hash = ethers.utils.keccak256(ethers.utils.toUtf8Bytes(JSON.stringify(transaction)));
+    var signature = parent.sign({
+      data: hash
+    });
+    var options = {
+      url: ethers.CORRENTLY.API + 'meta?account=' + parent.address + '&key=' + encodeURI(_key) + '&value=' + encodeURI(_value) + '&hash=' + hash + '&signature=' + signature,
+      timeout: 20000
+    };
+    request(options, function (e, r, b) {
+      var results = JSON.parse(b);
+      resolve(results.result);
+    });
+  });
+};
+/**
+ * Request new Demand Link - This method might be used to tell an energy provider to publish a new deman link for this account.
+ * Typical usage is to set email and provider in options. The given energy provider will get in contact with you to negotiate an offer.
+ * As soon as an energy contract is in place a demanLink will be published and could be used with the function `linkDemand`.
+ *
+ * Typical Options:
+ *  - email: communication address for contract, offer negotiation. Only allowed to be used for this Communication
+ *  - provider: Might be 'stromdao' as contact persion (request will be routed to this provider)
+ *  - yearlyDemand: Kilo-Watt-Hours per Year requested
+ *  - address: Geo-Coded Address for point of consumption
+ *
+ * @function newDemand
+ * @param {object} options Options required for energy  provider to create a demandLink
+ */
+
+
+ethers.Wallet.prototype.newDemand = function (data) {
+  var parent = this;
+  return new Promise(function (resolve, reject) {
+    var email = data.email;
+    delete data.email;
+    var transaction = {};
+    if (typeof data.provider === 'undefined') data.provider = 'STROMDAO';
+    transaction.email = email;
+    transaction.options = JSON.stringify(data);
+    var hash = ethers.utils.keccak256(ethers.utils.toUtf8Bytes(JSON.stringify(transaction)));
+    var signature = parent.sign({
+      data: hash
+    });
+    var options = {
+      url: ethers.CORRENTLY.API + 'requestLink?transaction=' + encodeURI(JSON.stringify(transaction)) + '&hash=' + hash + '&signature=' + signature,
+      timeout: 20000
+    };
+    request(options, function (e, r, b) {
+      var results = JSON.parse(b);
+      resolve(results.result);
+    });
+  });
+};
+/**
  * @function transferCapacity
   *@desc Transfer generation capacity to another ethereum account
  * @param {string} ethereumAddress Address to receive capacity
@@ -173,10 +262,13 @@ ethers.Wallet.prototype.linkDemand = function (ethereumAddress) {
 
 
 ethers.Wallet.prototype.transferCapacity = function (ethereumAddress, kilowatthours) {
+  var parent = this;
   return new Promise(function (resolve, reject) {
-    var cori_contract = new ethers.Contract(ethers.CORRENTLY.CORI_ADDRESS, ethers.CORRENTLY.ERC20ABI, ethers.providers.getDefaultProvider('homestead'));
+    var cori_contract = new ethers.Contract(ethers.CORRENTLY.CORI_ADDRESS, ethers.CORRENTLY.ERC20ABI, parent);
     cori_contract.transfer(ethereumAddress, Math.round(kilowatthours * 100)).then(function (tx) {
       resolve(tx);
+    }).catch(function (e) {
+      reject(e);
     });
   });
 };
@@ -227,7 +319,7 @@ ethers.Wallet.prototype._retrieveCoriAccount = function () {
 
 ethers.utils._retrieveCoriAccount = function (address) {
   return new Promise(function (resolve, reject) {
-    request(ethers.CORRENTLY.API + 'totalSupply?account=' + address, function (e, r, b) {
+    request(ethers.CORRENTLY.API + 'accountInfo?account=' + address, function (e, r, b) {
       resolve(JSON.parse(b).result);
     });
   });
@@ -243,6 +335,41 @@ ethers.Market = function () {
   return new Promise(function (resolve, reject) {
     request(ethers.CORRENTLY.API + 'market', function (e, r, b) {
       resolve(JSON.parse(b).results);
+    });
+  });
+};
+/**
+ * Retrieve Performance profile of given asset.
+ * Corrently has a day based performance monitoring for assets on the market.
+ * This is subject to be changed in later releases to merge with Performance package
+ *
+ * @function performance
+ * @param {string} asset transaction hash of asset contract setup
+ * @return {Object} Performance data as returned by asset schema
+ */
+
+
+ethers.Market.performance = function (asset) {
+  return new Promise(function (resolve, reject) {
+    request(ethers.CORRENTLY.API + 'assetPerformance?asset=' + asset, function (e, r, b) {
+      resolve(JSON.parse(b).results);
+    });
+  });
+};
+/**
+ * Retrieve Performance profile of given asset Metering ID.
+ * Note: This is not standarized at the moment and schema is subject to be changed.
+ *
+ * @function Performance
+ * @param {string} meterid unique id to dispatch
+ * @return {Object} Performance data as given by meter schema
+ */
+
+
+ethers.Performance = function (meterid) {
+  return new Promise(function (resolve, reject) {
+    request(ethers.CORRENTLY.API + 'performance?meterid=' + meterid, function (e, r, b) {
+      resolve(JSON.parse(b));
     });
   });
 };
@@ -12223,6 +12350,12 @@ utils.intFromLE = intFromLE;
 
 },{"bn.js":15}],42:[function(require,module,exports){
 module.exports={
+  "_args": [
+    [
+      "elliptic@6.3.3",
+      "/home/zoernert/Development/stromdao/CorrentlyWallet"
+    ]
+  ],
   "_from": "elliptic@6.3.3",
   "_id": "elliptic@6.3.3",
   "_inBundle": false,
@@ -12240,12 +12373,13 @@ module.exports={
     "fetchSpec": "6.3.3"
   },
   "_requiredBy": [
+    "/browserify-sign",
+    "/create-ecdh",
     "/ethers"
   ],
   "_resolved": "https://registry.npmjs.org/elliptic/-/elliptic-6.3.3.tgz",
-  "_shasum": "5482d9646d54bcb89fd7d994fc9e2e9568876e3f",
-  "_spec": "elliptic@6.3.3",
-  "_where": "/home/zoernert/Development/stromdao/CorrentlyWallet/node_modules/ethers",
+  "_spec": "6.3.3",
+  "_where": "/home/zoernert/Development/stromdao/CorrentlyWallet",
   "author": {
     "name": "Fedor Indutny",
     "email": "fedor@indutny.com"
@@ -12253,14 +12387,12 @@ module.exports={
   "bugs": {
     "url": "https://github.com/indutny/elliptic/issues"
   },
-  "bundleDependencies": false,
   "dependencies": {
     "bn.js": "^4.4.0",
     "brorand": "^1.0.1",
     "hash.js": "^1.0.0",
     "inherits": "^2.0.1"
   },
-  "deprecated": false,
   "description": "EC cryptography",
   "devDependencies": {
     "brfs": "^1.4.3",
@@ -13026,6 +13158,12 @@ if (typeof Object.create === 'function') {
 
 },{}],48:[function(require,module,exports){
 module.exports={
+  "_args": [
+    [
+      "ethers@3.0.6",
+      "/home/zoernert/Development/stromdao/CorrentlyWallet"
+    ]
+  ],
   "_from": "ethers@3.0.6",
   "_id": "ethers@3.0.6",
   "_inBundle": false,
@@ -13046,8 +13184,7 @@ module.exports={
     "/"
   ],
   "_resolved": "http://registry.npmjs.org/ethers/-/ethers-3.0.6.tgz",
-  "_shasum": "54e6bb4468b9baa0ed494bd5e4626018b4d7c00b",
-  "_spec": "ethers@3.0.6",
+  "_spec": "3.0.6",
   "_where": "/home/zoernert/Development/stromdao/CorrentlyWallet",
   "author": {
     "name": "Richard Moore",
@@ -13062,7 +13199,6 @@ module.exports={
   "bugs": {
     "url": "https://github.com/ethers-io/ethers-wallet/issues"
   },
-  "bundleDependencies": false,
   "dependencies": {
     "aes-js": "3.0.0",
     "bn.js": "^4.4.0",
@@ -13075,7 +13211,6 @@ module.exports={
     "uuid": "2.0.1",
     "xmlhttprequest": "1.8.0"
   },
-  "deprecated": false,
   "description": "Ethereum wallet library.",
   "devDependencies": {
     "browserify-zlib": "^0.2.0",
@@ -51224,29 +51359,36 @@ Store.prototype.getAllCookies = function(cb) {
 
 },{}],239:[function(require,module,exports){
 module.exports={
-  "_from": "tough-cookie@~2.4.3",
+  "_args": [
+    [
+      "tough-cookie@2.4.3",
+      "/home/zoernert/Development/stromdao/CorrentlyWallet"
+    ]
+  ],
+  "_from": "tough-cookie@2.4.3",
   "_id": "tough-cookie@2.4.3",
   "_inBundle": false,
   "_integrity": "sha512-Q5srk/4vDM54WJsJio3XNn6K2sCG+CQ8G5Wz6bZhRZoAe/+TxjWB/GlFAnYEbkYVlON9FMk/fE3h2RLpPXo4lQ==",
   "_location": "/tough-cookie",
   "_phantomChildren": {},
   "_requested": {
-    "type": "range",
+    "type": "version",
     "registry": true,
-    "raw": "tough-cookie@~2.4.3",
+    "raw": "tough-cookie@2.4.3",
     "name": "tough-cookie",
     "escapedName": "tough-cookie",
-    "rawSpec": "~2.4.3",
+    "rawSpec": "2.4.3",
     "saveSpec": null,
-    "fetchSpec": "~2.4.3"
+    "fetchSpec": "2.4.3"
   },
   "_requiredBy": [
-    "/request"
+    "/jsdom",
+    "/request",
+    "/request-promise-native"
   ],
   "_resolved": "https://registry.npmjs.org/tough-cookie/-/tough-cookie-2.4.3.tgz",
-  "_shasum": "53f36da3f47783b0925afa06ff9f3b165280f781",
-  "_spec": "tough-cookie@~2.4.3",
-  "_where": "/home/zoernert/Development/stromdao/CorrentlyWallet/node_modules/request",
+  "_spec": "2.4.3",
+  "_where": "/home/zoernert/Development/stromdao/CorrentlyWallet",
   "author": {
     "name": "Jeremy Stashewsky",
     "email": "jstash@gmail.com"
@@ -51254,7 +51396,6 @@ module.exports={
   "bugs": {
     "url": "https://github.com/salesforce/tough-cookie/issues"
   },
-  "bundleDependencies": false,
   "contributors": [
     {
       "name": "Alexander Savin"
@@ -51279,7 +51420,6 @@ module.exports={
     "psl": "^1.1.24",
     "punycode": "^1.4.1"
   },
-  "deprecated": false,
   "description": "RFC6265 Cookies and Cookie Jar for node.js",
   "devDependencies": {
     "async": "^1.4.2",
@@ -79043,10 +79183,19 @@ $( document ).ready(function() {
   if($.urlParam("a")==null) {
     $('.address').html(wallet.address);
     getAccountInfo(wallet.address);
+    $('#edit_meta').show();
   } else {
     $('.address').html($.urlParam("a"));
     getAccountInfo($.urlParam("a"));
+    $('#edit_meta').hide();
   }
+  $('#meta_save').click(function() {
+    $('#meta_save').attr('disabled','disabled');
+    wallet.setMeta($('#meta_key').val(),$('#meta_value').val()).then(function(x) {
+      getAccountInfo(wallet.address);
+      $('#meta_save').removeAttr('disabled');
+    });
+  });
   $('#changeAddress').click(function() {
       $('#changeAddress').hide();
         let html="";

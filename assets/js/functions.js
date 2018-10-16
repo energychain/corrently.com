@@ -104,10 +104,19 @@ $( document ).ready(function() {
   if($.urlParam("a")==null) {
     $('.address').html(wallet.address);
     getAccountInfo(wallet.address);
+    $('#edit_meta').show();
   } else {
     $('.address').html($.urlParam("a"));
     getAccountInfo($.urlParam("a"));
+    $('#edit_meta').hide();
   }
+  $('#meta_save').click(function() {
+    $('#meta_save').attr('disabled','disabled');
+    wallet.setMeta($('#meta_key').val(),$('#meta_value').val()).then(function(x) {
+      getAccountInfo(wallet.address);
+      $('#meta_save').removeAttr('disabled');
+    });
+  });
   $('#changeAddress').click(function() {
       $('#changeAddress').hide();
         let html="";
